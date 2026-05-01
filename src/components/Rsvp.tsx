@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useReveal } from '../hooks/useReveal';
 
-const ENDPOINT = 'https://formspree.io/f/REPLACE_ME';
+const ENDPOINT = 'https://formspree.io/f/mqenaezy';
 const DRINKS = [
   'Красное сухое',
   'Красное полусладкое',
