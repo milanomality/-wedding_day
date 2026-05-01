@@ -32,6 +32,8 @@ export default function Gallery() {
         gsap.set(items, { opacity: 0.6, scale: 0.96 });
 
         const distance = () => track.scrollWidth - window.innerWidth + 32;
+        // Cap pin length so a long photo list does not eat too many screens of scroll.
+        const pinLength = () => Math.min(distance(), window.innerHeight * 4.5);
 
         const tween = gsap.to(track, {
           x: () => -distance(),
@@ -39,7 +41,7 @@ export default function Gallery() {
           scrollTrigger: {
             trigger: section,
             start: 'top top',
-            end: () => `+=${distance()}`,
+            end: () => `+=${pinLength()}`,
             pin: true,
             scrub: 0.6,
             invalidateOnRefresh: true,
