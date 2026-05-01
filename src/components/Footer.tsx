@@ -5,7 +5,7 @@ export default function Footer() {
         Ян <span className="footer__amp">&amp;</span> Алина
       </p>
       <p className="footer__date">26 июня 2026</p>
-      <p className="footer__note">Просим подтвердить присутствие до 1 июня 2026</p>
+      <p className="footer__note">Будем рады вашему ответу в любое удобное время</p>
     </footer>
   );
 }
