@@ -89,26 +89,45 @@ export default function Gallery() {
       return () => ctx.revert();
     });
 
-    // Mobile: vertical column with stagger reveal + soft parallax per image
+    // Mobile: native horizontal swipe with scroll-snap. Active card (the one
+    // closest to viewport center) gets scaled up; neighbours dim and shrink.
     mm.add('(max-width: 767px)', () => {
-      const ctx = gsap.context(() => {
-        const items = track.querySelectorAll<HTMLElement>('.gallery-h__item');
-        gsap.fromTo(
-          items,
-          { opacity: 0, y: 50, scale: 0.95 },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            ease: 'power3.out',
-            duration: 0.9,
-            stagger: 0.08,
-            scrollTrigger: { trigger: track, start: 'top 75%', once: true },
-          }
-        );
-      }, section);
+      const items = Array.from(track.querySelectorAll<HTMLElement>('.gallery-h__item'));
+      if (items.length === 0) return;
 
-      return () => ctx.revert();
+      let raf = 0;
+      const update = () => {
+        raf = 0;
+        const r = track.getBoundingClientRect();
+        const centerX = r.left + r.width / 2;
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        items.forEach((it, i) => {
+          const ir = it.getBoundingClientRect();
+          const d = Math.abs(ir.left + ir.width / 2 - centerX);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = i;
+          }
+        });
+        items.forEach((it, i) => it.classList.toggle('is-active', i === bestIdx));
+      };
+
+      const schedule = () => {
+        if (raf) return;
+        raf = requestAnimationFrame(update);
+      };
+
+      update();
+      track.addEventListener('scroll', schedule, { passive: true });
+      window.addEventListener('resize', schedule);
+
+      return () => {
+        if (raf) cancelAnimationFrame(raf);
+        track.removeEventListener('scroll', schedule);
+        window.removeEventListener('resize', schedule);
+        items.forEach((it) => it.classList.remove('is-active'));
+      };
     });
 
     return () => mm.revert();
