@@ -2,83 +2,140 @@ import { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReveal } from '../hooks/useReveal';
-import photo1 from '../../res/photo_2026-05-01_17-09-15.jpg';
-import photo2 from '../../res/photo_2026-05-01_17-09-16.jpg';
-import photo3 from '../../res/photo_2026-05-01_17-09-17.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const PHOTOS = [
-  { src: photo1, alt: 'Ян и Алина — студийная фотосессия', tall: true },
-  { src: photo2, alt: 'Ян и Алина — вечер', tall: false },
-  { src: photo3, alt: 'Ян и Алина — на закате', tall: false },
-];
+// Pick up every photo in res/ automatically. New files appear next build.
+const modules = import.meta.glob<{ default: string }>('../../res/photo_*.jpg', { eager: true });
+const PHOTOS: string[] = Object.entries(modules)
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(([, mod]) => mod.default);
 
 export default function Gallery() {
   const headerRef = useReveal<HTMLDivElement>({ childSelector: '.section__head > *' });
-  const galleryRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!galleryRef.current) return;
-    const ctx = gsap.context(() => {
-      const items = galleryRef.current!.querySelectorAll<HTMLElement>('.gallery__item');
-      items.forEach((item) => {
-        const img = item.querySelector('img');
-        if (!img) return;
-        gsap.fromTo(
-          img,
-          { yPercent: -8, scale: 1.1 },
-          {
-            yPercent: 8,
+    const section = sectionRef.current;
+    const track = trackRef.current;
+    if (!section || !track) return;
+
+    const mm = gsap.matchMedia();
+
+    // Desktop / tablet: horizontal pinned scroll
+    mm.add('(min-width: 768px)', () => {
+      const ctx = gsap.context(() => {
+        const items = track.querySelectorAll<HTMLElement>('.gallery-h__item');
+
+        // Initial state for in-view animation when entering scrub
+        gsap.set(items, { opacity: 0.6, scale: 0.96 });
+
+        const distance = () => track.scrollWidth - window.innerWidth + 32;
+
+        const tween = gsap.to(track, {
+          x: () => -distance(),
+          ease: 'none',
+          scrollTrigger: {
+            trigger: section,
+            start: 'top top',
+            end: () => `+=${distance()}`,
+            pin: true,
+            scrub: 0.6,
+            invalidateOnRefresh: true,
+            anticipatePin: 1,
+          },
+        });
+
+        // Each item perks up a bit when it crosses screen center
+        items.forEach((item) => {
+          gsap.to(item, {
+            opacity: 1,
+            scale: 1,
             ease: 'none',
             scrollTrigger: {
               trigger: item,
-              start: 'top bottom',
-              end: 'bottom top',
+              containerAnimation: tween,
+              start: 'left 80%',
+              end: 'left 30%',
               scrub: true,
             },
+          });
+
+          // Photo parallax inside its frame
+          const img = item.querySelector('img');
+          if (img) {
+            gsap.fromTo(
+              img,
+              { xPercent: -6 },
+              {
+                xPercent: 6,
+                ease: 'none',
+                scrollTrigger: {
+                  trigger: item,
+                  containerAnimation: tween,
+                  start: 'left right',
+                  end: 'right left',
+                  scrub: true,
+                },
+              }
+            );
+          }
+        });
+      }, section);
+
+      return () => ctx.revert();
+    });
+
+    // Mobile: vertical column with stagger reveal + soft parallax per image
+    mm.add('(max-width: 767px)', () => {
+      const ctx = gsap.context(() => {
+        const items = track.querySelectorAll<HTMLElement>('.gallery-h__item');
+        gsap.fromTo(
+          items,
+          { opacity: 0, y: 50, scale: 0.95 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            ease: 'power3.out',
+            duration: 0.9,
+            stagger: 0.08,
+            scrollTrigger: { trigger: track, start: 'top 75%', once: true },
           }
         );
-      });
+      }, section);
 
-      gsap.fromTo(
-        items,
-        { opacity: 0, y: 60, scale: 0.96 },
-        {
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          duration: 1.1,
-          ease: 'power3.out',
-          stagger: 0.12,
-          scrollTrigger: {
-            trigger: galleryRef.current,
-            start: 'top 78%',
-            once: true,
-          },
-        }
-      );
-    }, galleryRef);
+      return () => ctx.revert();
+    });
 
-    return () => ctx.revert();
+    return () => mm.revert();
   }, []);
 
   return (
-    <section className="section section--gallery" id="moments">
+    <section className="section section--gallery" id="moments" ref={sectionRef}>
       <div className="section__head" ref={headerRef}>
-        <p className="section__kicker">Наши моменты</p>
+        <p className="section__kicker">Наши моменты · {PHOTOS.length}</p>
         <h2 className="section__title">Мы с тобой</h2>
+        <p className="section__lead">Прокручивайте — кадры плывут навстречу.</p>
       </div>
 
-      <div className="gallery" ref={galleryRef}>
-        {PHOTOS.map((p, i) => (
-          <figure
-            key={p.src}
-            className={`gallery__item${p.tall ? ' gallery__item--tall' : ''}`}
-          >
-            <img src={p.src} alt={p.alt} loading={i === 0 ? 'eager' : 'lazy'} />
-          </figure>
-        ))}
+      <div className="gallery-h">
+        <div className="gallery-h__track" ref={trackRef}>
+          {PHOTOS.map((src, i) => (
+            <figure
+              key={src}
+              className="gallery-h__item"
+              style={{ '--i': i } as React.CSSProperties}
+            >
+              <img src={src} alt={`Ян и Алина — кадр ${i + 1}`} loading={i < 2 ? 'eager' : 'lazy'} />
+              <figcaption className="gallery-h__caption">
+                <span>{String(i + 1).padStart(2, '0')}</span>
+                <span>/ {String(PHOTOS.length).padStart(2, '0')}</span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
       </div>
     </section>
   );
