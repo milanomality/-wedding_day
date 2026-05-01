@@ -102,7 +102,7 @@ export default function Rsvp() {
               type="number"
               name="guests"
               min={1}
-              max={4}
+              max={10}
               defaultValue={1}
               required
             />
