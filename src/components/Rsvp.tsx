@@ -2,7 +2,19 @@ import { FormEvent, useState } from 'react';
 import { useReveal } from '../hooks/useReveal';
 
 const ENDPOINT = 'https://formspree.io/f/REPLACE_ME';
-const DRINKS = ['Вино', 'Водка', 'Шампанское', 'Коньяк', 'Пиво', 'Виски', 'Самогон', 'Б/А'];
+const DRINKS = [
+  'Красное сухое',
+  'Красное полусладкое',
+  'Белое сухое',
+  'Белое полусладкое',
+  'Шампанское',
+  'Водка',
+  'Коньяк',
+  'Виски',
+  'Пиво',
+  'Самогон',
+  'Б/А',
+];
 
 type Status = 'idle' | 'sending' | 'ok' | 'error' | 'unconfigured';
 
