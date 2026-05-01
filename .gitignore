@@ -11,3 +11,15 @@ desktop.ini
 
 # Claude Code local settings
 .claude/
+
+# Node / Vite
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# TypeScript build cache
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
