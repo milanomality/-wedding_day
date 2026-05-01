@@ -54,7 +54,7 @@ export default function Hero() {
   const splitChars = (text: string) =>
     Array.from(text).map((ch, i) => (
       <span key={i} aria-hidden="true">
-        {ch === ' ' ? ' ' : ch}
+        {ch === ' ' ? ' ' : ch}
       </span>
     ));
 

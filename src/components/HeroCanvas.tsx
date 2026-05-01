@@ -1,7 +1,6 @@
-import { useRef, useMemo, useEffect, useState } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import heroPhoto from '../../res/photo_2026-05-01_17-09-17.jpg';
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -13,27 +12,13 @@ const vertexShader = /* glsl */ `
 
 const fragmentShader = /* glsl */ `
   precision highp float;
-  uniform sampler2D uTexture;
+  uniform float uTime;
   uniform vec2 uMouse;
   uniform vec2 uMouseTarget;
-  uniform float uTime;
-  uniform vec2 uPlaneSize;
-  uniform vec2 uImageSize;
+  uniform float uAspect;
   varying vec2 vUv;
 
-  vec2 coverUv(vec2 uv, vec2 plane, vec2 image) {
-    float planeAspect = plane.x / plane.y;
-    float imageAspect = image.x / image.y;
-    vec2 scale = vec2(1.0);
-    if (imageAspect > planeAspect) {
-      scale.x = planeAspect / imageAspect;
-    } else {
-      scale.y = imageAspect / planeAspect;
-    }
-    return (uv - 0.5) * scale + 0.5;
-  }
-
-  // Cheap 2D noise
+  // Hash + value noise
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
     vec2 i = floor(p);
@@ -43,56 +28,73 @@ const fragmentShader = /* glsl */ `
                mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y);
   }
 
+  // Soft circular blob with smooth edges
+  float blob(vec2 p, vec2 c, float r) {
+    return smoothstep(r, 0.0, distance(p, c));
+  }
+
   void main() {
-    vec2 uv = coverUv(vUv, uPlaneSize, uImageSize);
+    vec2 uv = vUv;
+    vec2 p = vec2(uv.x * uAspect, uv.y);
 
-    // Subtle idle wave
-    float wave = sin(uTime * 0.4 + uv.y * 8.0) * cos(uTime * 0.3 + uv.x * 6.0);
-    uv += vec2(wave * 0.0035, wave * 0.0028);
+    float t = uTime * 0.12;
 
-    // Mouse displacement
-    float dist = distance(vUv, uMouseTarget);
-    float strength = smoothstep(0.45, 0.0, dist);
-    vec2 toCenter = normalize(vUv - uMouseTarget + 0.0001);
-    vec2 disp = toCenter * strength * 0.05;
-    uv -= disp;
+    // Slow drifting blob centers
+    vec2 c1 = vec2(0.30 * uAspect + sin(t * 0.7) * 0.18, 0.35 + cos(t * 0.5) * 0.22);
+    vec2 c2 = vec2(0.75 * uAspect + cos(t * 0.6) * 0.20, 0.65 + sin(t * 0.8) * 0.18);
+    vec2 c3 = vec2(0.50 * uAspect + sin(t * 0.4 + 1.5) * 0.30, 0.20 + cos(t * 0.45) * 0.18);
+    vec2 c4 = vec2(0.55 * uAspect + cos(t * 0.55 + 2.0) * 0.25, 0.85 + sin(t * 0.35) * 0.18);
 
-    // RGB shift (chromatic aberration) near cursor
-    float ca = strength * 0.012;
-    float r = texture2D(uTexture, uv + vec2(ca, 0.0)).r;
-    float g = texture2D(uTexture, uv).g;
-    float b = texture2D(uTexture, uv - vec2(ca, 0.0)).b;
-    vec3 color = vec3(r, g, b);
+    float b1 = blob(p, c1, 0.55);
+    float b2 = blob(p, c2, 0.55);
+    float b3 = blob(p, c3, 0.50);
+    float b4 = blob(p, c4, 0.50);
 
-    // Warm tint + subtle vignette
-    color *= mix(1.0, 0.84, smoothstep(0.4, 1.1, distance(vUv, vec2(0.5))));
-    color = mix(color, color * vec3(1.04, 0.99, 0.94), 0.5);
+    // Wedding palette (peach, sage, sand, blush, cream)
+    vec3 cBg    = vec3(0.984, 0.965, 0.937); // cream base
+    vec3 cPeach = vec3(0.961, 0.792, 0.659);
+    vec3 cSage  = vec3(0.722, 0.824, 0.702);
+    vec3 cBlue  = vec3(0.737, 0.831, 0.878);
+    vec3 cSand  = vec3(0.905, 0.831, 0.643);
 
-    // Soft grain
-    float grain = (noise(vUv * 800.0 + uTime * 2.0) - 0.5) * 0.04;
-    color += grain;
+    vec3 color = cBg;
+    color = mix(color, cPeach, b1 * 0.78);
+    color = mix(color, cSand,  b2 * 0.55);
+    color = mix(color, cSage,  b3 * 0.45);
+    color = mix(color, cBlue,  b4 * 0.40);
+
+    // Subtle noise wash for organic texture
+    float n = noise(uv * 6.0 + t * 0.5);
+    color = mix(color, color * (0.94 + n * 0.10), 0.6);
+
+    // Cursor highlight: gentle warm glow following mouse
+    float cursor = smoothstep(0.35, 0.0, distance(vec2(uMouse.x * uAspect, uMouse.y), p));
+    color += vec3(0.05, 0.03, 0.02) * cursor;
+
+    // Soft vignette
+    float v = 1.0 - smoothstep(0.55, 1.05, distance(uv, vec2(0.5)));
+    color = mix(color * 0.92, color, v);
+
+    // Fine grain
+    float g = (noise(uv * 900.0 + t * 4.0) - 0.5) * 0.03;
+    color += g;
 
     gl_FragColor = vec4(color, 1.0);
   }
 `;
 
-function PhotoPlane({ texture }: { texture: THREE.Texture }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+function GradientPlane() {
   const matRef = useRef<THREE.ShaderMaterial>(null);
   const { viewport, size } = useThree();
 
   const uniforms = useMemo(
     () => ({
-      uTexture: { value: texture },
+      uTime: { value: 0 },
       uMouse: { value: new THREE.Vector2(0.5, 0.5) },
       uMouseTarget: { value: new THREE.Vector2(0.5, 0.5) },
-      uTime: { value: 0 },
-      uPlaneSize: { value: new THREE.Vector2(viewport.width, viewport.height) },
-      uImageSize: {
-        value: new THREE.Vector2(texture.image?.width || 1, texture.image?.height || 1),
-      },
+      uAspect: { value: size.width / Math.max(size.height, 1) },
     }),
-    [texture, viewport.width, viewport.height]
+    [size.width, size.height]
   );
 
   useEffect(() => {
@@ -101,9 +103,7 @@ function PhotoPlane({ texture }: { texture: THREE.Texture }) {
       const y = 1 - e.clientY / size.height;
       uniforms.uMouseTarget.value.set(x, y);
     };
-    const onLeave = () => {
-      uniforms.uMouseTarget.value.set(0.5, 0.5);
-    };
+    const onLeave = () => uniforms.uMouseTarget.value.set(0.5, 0.5);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerleave', onLeave);
     return () => {
@@ -116,11 +116,11 @@ function PhotoPlane({ texture }: { texture: THREE.Texture }) {
     if (!matRef.current) return;
     uniforms.uTime.value += delta;
     uniforms.uMouse.value.lerp(uniforms.uMouseTarget.value, 0.06);
-    uniforms.uPlaneSize.value.set(viewport.width, viewport.height);
+    uniforms.uAspect.value = size.width / Math.max(size.height, 1);
   });
 
   return (
-    <mesh ref={meshRef}>
+    <mesh>
       <planeGeometry args={[viewport.width, viewport.height, 1, 1]} />
       <shaderMaterial
         ref={matRef}
@@ -132,22 +132,6 @@ function PhotoPlane({ texture }: { texture: THREE.Texture }) {
   );
 }
 
-function HeroScene() {
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
-
-  useEffect(() => {
-    const loader = new THREE.TextureLoader();
-    loader.load(heroPhoto, (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.needsUpdate = true;
-      setTexture(tex);
-    });
-  }, []);
-
-  if (!texture) return null;
-  return <PhotoPlane texture={texture} />;
-}
-
 export default function HeroCanvas() {
   return (
     <Canvas
@@ -157,8 +141,8 @@ export default function HeroCanvas() {
       dpr={[1, 1.75]}
       style={{ position: 'absolute', inset: 0 }}
     >
-      <color attach="background" args={['#f3ead9']} />
-      <HeroScene />
+      <color attach="background" args={['#faf6ef']} />
+      <GradientPlane />
     </Canvas>
   );
 }
